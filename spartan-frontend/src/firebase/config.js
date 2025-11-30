@@ -1,4 +1,3 @@
-// Firebase Configuration
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
@@ -12,7 +11,6 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// Validate that all required environment variables are present
 const requiredEnvVars = [
   'REACT_APP_FIREBASE_API_KEY',
   'REACT_APP_FIREBASE_AUTH_DOMAIN',
@@ -28,11 +26,9 @@ const missingVars = requiredEnvVars.filter(
 
 if (missingVars.length > 0) {
   console.error('Missing Firebase environment variables:', missingVars);
-  console.error('Please make sure your .env file exists and contains all required variables.');
-  console.error('You may need to restart your React development server after creating/updating .env');
+  console.error('Create a .env file with all required variables and restart the server.');
 }
 
-// Initialize Firebase
 let app;
 let db;
 let auth;

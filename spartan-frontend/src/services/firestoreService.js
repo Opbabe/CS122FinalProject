@@ -1,4 +1,3 @@
-// Firestore Service - CRUD operations for tasks
 import {
   collection,
   doc,
@@ -15,16 +14,24 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-// User ID - for now using "martinSanchez" as demo user
-// In production, this would come from Firebase Auth
 const USER_ID = "martinSanchez";
 
-// Get user's tasks collection reference
+const checkFirebaseInit = () => {
+  if (!db) {
+    throw new Error('Firebase is not initialized. Please check your Firebase configuration.');
+  }
+};
+
 const getTasksCollection = () => {
+  checkFirebaseInit();
   return collection(db, 'users', USER_ID, 'tasks');
 };
 
-// Convert Firestore timestamp to JavaScript Date
+const getEventsCollection = () => {
+  checkFirebaseInit();
+  return collection(db, 'users', USER_ID, 'events');
+};
+
 const convertTimestamp = (timestamp) => {
   if (!timestamp) return null;
   if (timestamp.toDate) {
@@ -36,19 +43,16 @@ const convertTimestamp = (timestamp) => {
   return new Date(timestamp);
 };
 
-// Convert task data for display
 const formatTask = (doc) => {
   const data = doc.data();
   const dueDate = convertTimestamp(data.dueAt);
   
-  // Map backend status to frontend status
   const statusMap = {
     'open': 'Not Started',
     'in_progress': 'In Progress',
     'done': 'Completed'
   };
 
-  // Map backend priority (0/1/2) to frontend priority (Low/Medium/High)
   const priorityMap = {
     0: 'Low',
     1: 'Medium',
@@ -73,9 +77,9 @@ const formatTask = (doc) => {
   };
 };
 
-// Get all tasks for the user
 export const getAllTasks = async () => {
   try {
+    checkFirebaseInit();
     const tasksRef = getTasksCollection();
     const q = query(tasksRef, orderBy('dueAt', 'asc'));
     const querySnapshot = await getDocs(q);
@@ -88,13 +92,16 @@ export const getAllTasks = async () => {
     return tasks;
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    throw error;
+    if (error.message.includes('Firebase is not initialized')) {
+      throw error;
+    }
+    return [];
   }
 };
 
-// Get a single task by ID
 export const getTask = async (taskId) => {
   try {
+    checkFirebaseInit();
     const taskRef = doc(db, 'users', USER_ID, 'tasks', taskId);
     const taskSnap = await getDoc(taskRef);
     
@@ -109,26 +116,23 @@ export const getTask = async (taskId) => {
   }
 };
 
-// Create a new task
 export const createTask = async (taskData) => {
   try {
+    checkFirebaseInit();
     const tasksRef = getTasksCollection();
     
-    // Map frontend priority to backend priority
     const priorityMap = {
       'Low': 0,
       'Medium': 1,
       'High': 2
     };
 
-    // Map frontend status to backend status
     const statusMap = {
       'Not Started': 'open',
       'In Progress': 'in_progress',
       'Completed': 'done'
     };
 
-    // Convert dueDate string to Firestore Timestamp
     let dueAt = null;
     if (taskData.dueDate) {
       dueAt = Timestamp.fromDate(new Date(taskData.dueDate));
@@ -157,12 +161,11 @@ export const createTask = async (taskData) => {
   }
 };
 
-// Update an existing task
 export const updateTask = async (taskId, updates) => {
   try {
+    checkFirebaseInit();
     const taskRef = doc(db, 'users', USER_ID, 'tasks', taskId);
     
-    // Map frontend priority to backend priority if needed
     if (updates.priority) {
       const priorityMap = {
         'Low': 0,
@@ -172,7 +175,6 @@ export const updateTask = async (taskId, updates) => {
       updates.priority = priorityMap[updates.priority];
     }
 
-    // Map frontend status to backend status if needed
     if (updates.status) {
       const statusMap = {
         'Not Started': 'open',
@@ -182,7 +184,6 @@ export const updateTask = async (taskId, updates) => {
       updates.status = statusMap[updates.status];
     }
 
-    // Convert dueDate string to Firestore Timestamp if provided
     if (updates.dueDate) {
       updates.dueAt = Timestamp.fromDate(new Date(updates.dueDate));
       delete updates.dueDate;
@@ -198,9 +199,9 @@ export const updateTask = async (taskId, updates) => {
   }
 };
 
-// Delete a task
 export const deleteTask = async (taskId) => {
   try {
+    checkFirebaseInit();
     const taskRef = doc(db, 'users', USER_ID, 'tasks', taskId);
     await deleteDoc(taskRef);
     return true;
@@ -210,9 +211,9 @@ export const deleteTask = async (taskId) => {
   }
 };
 
-// Get tasks by status
 export const getTasksByStatus = async (status) => {
   try {
+    checkFirebaseInit();
     const tasksRef = getTasksCollection();
     const statusMap = {
       'Not Started': 'open',
@@ -231,11 +232,10 @@ export const getTasksByStatus = async (status) => {
     return tasks;
   } catch (error) {
     console.error('Error fetching tasks by status:', error);
-    throw error;
+    return [];
   }
 };
 
-// Get task statistics
 export const getTaskStats = async () => {
   try {
     const allTasks = await getAllTasks();
@@ -262,7 +262,178 @@ export const getTaskStats = async () => {
     return stats;
   } catch (error) {
     console.error('Error fetching task stats:', error);
+    return {
+      totalTasks: 0,
+      completedTasks: 0,
+      inProgressTasks: 0,
+      notStartedTasks: 0,
+      upcomingThisWeek: 0,
+      overdue: 0,
+    };
+  }
+};
+
+const formatEvent = (doc) => {
+  const data = doc.data();
+  const startDate = convertTimestamp(data.startDate);
+  const endDate = convertTimestamp(data.endDate);
+  
+  const typeColors = {
+    'event': '#667eea',
+    'meeting': '#4facfe',
+    'holiday': '#30d158'
+  };
+
+  return {
+    id: doc.id,
+    title: data.title || '',
+    description: data.description || '',
+    type: data.type || 'event',
+    color: data.color || typeColors[data.type] || '#667eea',
+    location: data.location || '',
+    startDate: startDate,
+    endDate: endDate,
+    isAllDay: data.isAllDay || false,
+    createdAt: convertTimestamp(data.createdAt),
+    updatedAt: convertTimestamp(data.updatedAt),
+  };
+};
+
+export const getAllEvents = async () => {
+  try {
+    checkFirebaseInit();
+    const eventsRef = getEventsCollection();
+    const q = query(eventsRef, orderBy('startDate', 'asc'));
+    const querySnapshot = await getDocs(q);
+    
+    const events = [];
+    querySnapshot.forEach((doc) => {
+      events.push(formatEvent(doc));
+    });
+    
+    return events;
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    if (error.message.includes('Firebase is not initialized')) {
+      throw error;
+    }
+    return [];
+  }
+};
+
+export const getEvent = async (eventId) => {
+  try {
+    checkFirebaseInit();
+    const eventRef = doc(db, 'users', USER_ID, 'events', eventId);
+    const eventSnap = await getDoc(eventRef);
+    
+    if (eventSnap.exists()) {
+      return formatEvent(eventSnap);
+    } else {
+      throw new Error('Event not found');
+    }
+  } catch (error) {
+    console.error('Error fetching event:', error);
     throw error;
   }
 };
 
+export const createEvent = async (eventData) => {
+  try {
+    checkFirebaseInit();
+    const eventsRef = getEventsCollection();
+    
+    const typeColors = {
+      'event': '#667eea',
+      'meeting': '#4facfe',
+      'holiday': '#30d158'
+    };
+
+    let startDate = null;
+    let endDate = null;
+    
+    if (eventData.startDate && eventData.startTime) {
+      const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`);
+      startDate = Timestamp.fromDate(startDateTime);
+    } else if (eventData.startDate) {
+      const startDateTime = new Date(eventData.startDate);
+      startDate = Timestamp.fromDate(startDateTime);
+    }
+
+    if (eventData.endDate && eventData.endTime) {
+      const endDateTime = new Date(`${eventData.endDate}T${eventData.endTime}`);
+      endDate = Timestamp.fromDate(endDateTime);
+    } else if (eventData.endDate) {
+      const endDateTime = new Date(eventData.endDate);
+      endDate = Timestamp.fromDate(endDateTime);
+    } else if (startDate) {
+      endDate = startDate;
+    }
+
+    const eventToSave = {
+      title: eventData.title,
+      description: eventData.description || '',
+      type: eventData.type || 'event',
+      color: eventData.color || typeColors[eventData.type] || '#667eea',
+      location: eventData.location || '',
+      startDate: startDate || serverTimestamp(),
+      endDate: endDate || startDate || serverTimestamp(),
+      isAllDay: eventData.isAllDay || false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(eventsRef, eventToSave);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating event:', error);
+    throw error;
+  }
+};
+
+export const updateEvent = async (eventId, updates) => {
+  try {
+    checkFirebaseInit();
+    const eventRef = doc(db, 'users', USER_ID, 'events', eventId);
+    
+    if (updates.startDate || updates.startTime) {
+      if (updates.startDate && updates.startTime) {
+        const startDateTime = new Date(`${updates.startDate}T${updates.startTime}`);
+        updates.startDate = Timestamp.fromDate(startDateTime);
+        delete updates.startTime;
+      } else if (updates.startDate) {
+        updates.startDate = Timestamp.fromDate(new Date(updates.startDate));
+      }
+    }
+
+    if (updates.endDate || updates.endTime) {
+      if (updates.endDate && updates.endTime) {
+        const endDateTime = new Date(`${updates.endDate}T${updates.endTime}`);
+        updates.endDate = Timestamp.fromDate(endDateTime);
+        delete updates.endTime;
+      } else if (updates.endDate) {
+        updates.endDate = Timestamp.fromDate(new Date(updates.endDate));
+      }
+    }
+
+    updates.updatedAt = serverTimestamp();
+    
+    await updateDoc(eventRef, updates);
+    return true;
+  } catch (error) {
+    console.error('Error updating event:', error);
+    throw error;
+  }
+};
+
+export const deleteEvent = async (eventId) => {
+  try {
+    checkFirebaseInit();
+    const eventRef = doc(db, 'users', USER_ID, 'events', eventId);
+    await deleteDoc(eventRef);
+    return true;
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    throw error;
+  }
+};

@@ -37,7 +37,6 @@ function ReportsPage() {
     fetchData();
   }, []);
 
-  // Calculate category breakdown from real data
   const categoryBreakdown = tasks.reduce((acc, task) => {
     const category = task.category || 'Other';
     const existing = acc.find(item => item.category === category);
@@ -49,7 +48,6 @@ function ReportsPage() {
     return acc;
   }, []).sort((a, b) => b.count - a.count);
 
-  // Calculate priority breakdown from real data
   const priorityBreakdown = tasks.reduce((acc, task) => {
     const priority = task.priority || 'Medium';
     const existing = acc.find(item => item.priority === priority);

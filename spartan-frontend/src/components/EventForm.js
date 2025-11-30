@@ -1,24 +1,28 @@
 import React, { useState } from "react";
-import { createTask } from "../services/firestoreService";
+import { createEvent } from "../services/firestoreService";
 
-function TaskForm() {
+function EventForm() {
   const [formData, setFormData] = useState({
     title: "",
-    category: "Homework",
-    priority: "Medium",
-    dueDate: "",
-    notes: "",
-    status: "Not Started",
-    courseName: "",
+    type: "event",
+    startDate: "",
+    startTime: "",
+    endDate: "",
+    endTime: "",
+    isAllDay: false,
+    location: "",
+    description: "",
+    color: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState(null);
 
   const handleChange = (field) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     setFormData((prev) => ({
       ...prev,
-      [field]: event.target.value,
+      [field]: value,
     }));
   };
 
@@ -28,41 +32,64 @@ function TaskForm() {
     setError(null);
 
     try {
-      await createTask(formData);
+      if (!formData.title.trim()) {
+        throw new Error("Event title is required");
+      }
+      if (!formData.startDate) {
+        throw new Error("Start date is required");
+      }
+
+      const eventData = {
+        ...formData,
+        startTime: formData.isAllDay ? "" : formData.startTime,
+        endTime: formData.isAllDay ? "" : formData.endTime,
+        endDate: formData.endDate || formData.startDate,
+      };
+
+      await createEvent(eventData);
       setShowSuccess(true);
 
       setTimeout(() => {
         setFormData({
           title: "",
-          category: "Homework",
-          priority: "Medium",
-          dueDate: "",
-          notes: "",
-          status: "Not Started",
-          courseName: "",
+          type: "event",
+          startDate: "",
+          startTime: "",
+          endDate: "",
+          endTime: "",
+          isAllDay: false,
+          location: "",
+          description: "",
+          color: "",
         });
         setShowSuccess(false);
       }, 2000);
     } catch (err) {
-      console.error("Error creating task:", err);
-      setError("Failed to save task. Please check your Firebase configuration.");
+      console.error("Error creating event:", err);
+      setError(err.message || "Failed to save event. Please check your Firebase configuration.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const categories = ["Homework", "Exam", "Project", "Club", "Personal", "Other"];
-  const priorities = ["High", "Medium", "Low"];
-  const statuses = ["Not Started", "In Progress", "Completed"];
-  const courses = [
-    "CS 22B - Python Data Analysis",
-    "CS 122 - Adv Python Prog",
-    "CS 163 - Data Science Project",
-    "CS 171 - Intro Machine Learn",
-    "KIN 35B - Inter Wt Training",
-    "SSCI 101 - Leadership",
-    "Other",
+  const eventTypes = [
+    { value: "event", label: "Event", icon: "📅", color: "#667eea" },
+    { value: "meeting", label: "Meeting", icon: "👥", color: "#4facfe" },
+    { value: "holiday", label: "Holiday", icon: "🎉", color: "#30d158" },
   ];
+
+  React.useEffect(() => {
+    const typeData = eventTypes.find((t) => t.value === formData.type);
+    if (typeData && !formData.color) {
+      setFormData((prev) => ({ ...prev, color: typeData.color }));
+    }
+  }, [formData.type]);
+
+  React.useEffect(() => {
+    if (formData.isAllDay && formData.startDate && !formData.endDate) {
+      setFormData((prev) => ({ ...prev, endDate: prev.startDate }));
+    }
+  }, [formData.isAllDay, formData.startDate]);
 
   return (
     <div className="card" style={{ maxWidth: "800px" }}>
@@ -81,14 +108,13 @@ function TaskForm() {
             WebkitTextFillColor: "transparent",
           }}
         >
-          Create Spartan Task
+          Create Event
         </h2>
-        <span style={{ fontSize: "2rem" }}>📝</span>
+        <span style={{ fontSize: "2rem" }}>📅</span>
       </div>
 
       <p className="card-subtitle" style={{ maxWidth: "100%" }}>
-        Add a new assignment, project, or reminder to your SJSU academic calendar. All data is saved securely to
-        Firestore.
+        Add events, meetings, or holidays to your calendar. All events are saved securely to Firestore.
       </p>
 
       {error && (
@@ -120,17 +146,17 @@ function TaskForm() {
             animation: "fadeInUp 0.3s ease-out",
           }}
         >
-          <strong>✓ Success!</strong> Task saved to Firestore successfully
+          <strong>✓ Success!</strong> Event saved to Firestore successfully
         </div>
       )}
 
       <form className="form" onSubmit={handleSubmit}>
         <label className="form-label">
-          Task Title *
+          Event Title *
           <input
             className="form-input"
             type="text"
-            placeholder="Example: CS 122 Final Project Report"
+            placeholder="Example: Team Meeting, Spring Break, Project Deadline"
             value={formData.title}
             onChange={handleChange("title")}
             required
@@ -139,18 +165,17 @@ function TaskForm() {
         </label>
 
         <label className="form-label">
-          SJSU Course (Optional)
+          Event Type *
           <select
             className="form-input"
-            value={formData.courseName}
-            onChange={handleChange("courseName")}
+            value={formData.type}
+            onChange={handleChange("type")}
             disabled={isSubmitting}
             style={{ cursor: "pointer" }}
           >
-            <option value="">Select a course...</option>
-            {courses.map((course) => (
-              <option key={course} value={course}>
-                {course}
+            {eventTypes.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.icon} {type.label}
               </option>
             ))}
           </select>
@@ -164,37 +189,27 @@ function TaskForm() {
           }}
         >
           <label className="form-label">
-            Category
-            <select
+            Start Date *
+            <input
               className="form-input"
-              value={formData.category}
-              onChange={handleChange("category")}
+              type="date"
+              value={formData.startDate}
+              onChange={handleChange("startDate")}
+              required
               disabled={isSubmitting}
-              style={{ cursor: "pointer" }}
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+            />
           </label>
 
           <label className="form-label">
-            Priority
-            <select
+            Start Time {!formData.isAllDay && "*"}
+            <input
               className="form-input"
-              value={formData.priority}
-              onChange={handleChange("priority")}
-              disabled={isSubmitting}
-              style={{ cursor: "pointer" }}
-            >
-              {priorities.map((pri) => (
-                <option key={pri} value={pri}>
-                  {pri}
-                </option>
-              ))}
-            </select>
+              type="time"
+              value={formData.startTime}
+              onChange={handleChange("startTime")}
+              required={!formData.isAllDay}
+              disabled={isSubmitting || formData.isAllDay}
+            />
           </label>
         </div>
 
@@ -206,49 +221,75 @@ function TaskForm() {
           }}
         >
           <label className="form-label">
-            Due Date
+            End Date
             <input
               className="form-input"
               type="date"
-              value={formData.dueDate}
-              onChange={handleChange("dueDate")}
+              value={formData.endDate}
+              onChange={handleChange("endDate")}
+              min={formData.startDate}
               disabled={isSubmitting}
             />
           </label>
 
           <label className="form-label">
-            Status
-            <select
+            End Time
+            <input
               className="form-input"
-              value={formData.status}
-              onChange={handleChange("status")}
-              disabled={isSubmitting}
-              style={{ cursor: "pointer" }}
-            >
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+              type="time"
+              value={formData.endTime}
+              onChange={handleChange("endTime")}
+              disabled={isSubmitting || formData.isAllDay}
+            />
           </label>
         </div>
 
+        <label
+          className="form-label"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: "12px",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={formData.isAllDay}
+            onChange={handleChange("isAllDay")}
+            disabled={isSubmitting}
+            style={{ width: "20px", height: "20px", cursor: "pointer" }}
+          />
+          <span>All-day event</span>
+        </label>
+
         <label className="form-label">
-          Notes & Details
+          Location (Optional)
+          <input
+            className="form-input"
+            type="text"
+            placeholder="Example: SJSU Library, Zoom Meeting, Online"
+            value={formData.location}
+            onChange={handleChange("location")}
+            disabled={isSubmitting}
+          />
+        </label>
+
+        <label className="form-label">
+          Description (Optional)
           <textarea
             className="form-input"
             rows="5"
-            placeholder="Add any additional details, requirements, or reminders about this task..."
-            value={formData.notes}
-            onChange={handleChange("notes")}
+            placeholder="Add any additional details about this event..."
+            value={formData.description}
+            onChange={handleChange("description")}
             disabled={isSubmitting}
           />
         </label>
 
         <div style={{ display: "flex", gap: "16px", marginTop: "16px" }}>
           <button type="submit" className="primary-btn" disabled={isSubmitting} style={{ flex: 1 }}>
-            {isSubmitting ? "💾 Saving..." : "💾 Save Task"}
+            {isSubmitting ? "💾 Saving..." : "💾 Save Event"}
           </button>
 
           <button
@@ -256,12 +297,15 @@ function TaskForm() {
             onClick={() => {
               setFormData({
                 title: "",
-                category: "Homework",
-                priority: "Medium",
-                dueDate: "",
-                notes: "",
-                status: "Not Started",
-                courseName: "",
+                type: "event",
+                startDate: "",
+                startTime: "",
+                endDate: "",
+                endTime: "",
+                isAllDay: false,
+                location: "",
+                description: "",
+                color: "",
               });
               setError(null);
             }}
@@ -294,10 +338,11 @@ function TaskForm() {
       </form>
 
       <p className="hint-text" style={{ marginTop: "32px" }}>
-        * Required fields • All task data persists to Firestore database
+        * Required fields • All event data persists to Firestore database
       </p>
     </div>
   );
 }
 
-export default TaskForm;
+export default EventForm;
+
